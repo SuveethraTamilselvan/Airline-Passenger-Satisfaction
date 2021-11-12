@@ -1,0 +1,283 @@
+
+---
+title: "ElasticNet_RandomForest_SVM"
+author: "Krishna Kumar Nagarajan"
+date: "26/04/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load the necessary packages}
+pacman::p_load(esquisse, forecast, tidyverse,
+gplots, GGally, gganimate,
+mosaic, scales, mosaic, mapproj, mlbench, data.table)
+```
+
+
+```{r Reading Data}
+air_satisfaction <- read.csv('train.csv')
+air_satisfaction <- air_satisfaction[,3:25] # Removing x and id column
+test<- read.csv('test.csv')
+test <- test[,3:25]
+```
+
+```{r Data Imputation}
+NA.position <- which(is.na(air_satisfaction$Arrival.Delay.in.Minutes))
+air_satisfaction$Arrival.Delay.in.Minutes[NA.position] = mean(air_satisfaction$Arrival.Delay.in.Minutes, na.rm = TRUE)
+
+NA.position1 <- which(is.na(test$Arrival.Delay.in.Minutes))
+test$Arrival.Delay.in.Minutes[NA.position1] = mean(test$Arrival.Delay.in.Minutes, na.rm = TRUE)
+
+
+names1 <- c('Gender','Customer.Type' ,'Type.of.Travel','Class','satisfaction')
+air_satisfaction[,names1] <- lapply(air_satisfaction[,names1] ,factor)
+test[,names1] <- lapply(test[,names1] ,factor)
+
+str(air_satisfaction)
+
+names2 <- c('Gender','Customer.Type' ,'Type.of.Travel','Class','satisfaction')
+
+air_satisfaction <- subset(air_satisfaction, select = -c(Arrival.Delay.in.Minutes) )
+str(air_satisfaction)
+
+```
+
+```{r ElasticNet Model}
+
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(e1071)
+
+  
+# Training ELastic Net Regression model
+elastic_model <- train(satisfaction ~ .,
+                           data = air_satisfaction,
+                           method = "glmnet",
+                           preProcess = c("center", "scale"),
+                           tuneLength = 25,
+                           trControl = trainControl("cv", number =10),na.action=na.omit)
+
+elastic_model$bestTune
+```
+
+```{r Plotting Elastic Model}
+
+coef(elastic_model$finalModel, elastic_model$bestTune$lambda)
+plot(elastic_model)
+
+```
+```{r Prediction for test data set using Elastic Model}
+
+pred2 <- predict(elastic_model, test)
+accuracy <- mean(test$satisfaction==pred2)
+accuracy
+
+```
+
+```{r Feature Importance}
+ vip::vip(elastic_model, num_features = 22, geom = "point")
+```
+
+```{r Random forest Model}
+
+library(dplyr)
+library(ggplot2)
+library(ranger)
+library(h2o)  
+library(MASS)
+
+n_features <- length(setdiff(names(air_satisfaction), "satisfaction"))
+
+ rf1 <- ranger(
+  satisfaction ~., 
+  data = air_satisfaction,
+  mtry = floor(n_features / 3),
+  respect.unordered.factors = "order",
+  seed = 42,
+  classification=TRUE
+)
+
+# get OOB RMSE
+(default_rmse <- sqrt(rf1$prediction.error))
+ 
+```
+
+
+```{r Hyperparameter tuning in random forest}
+n_features <- length(setdiff(names(air_satisfaction), "satisfaction"))
+#n_features <- length(names(my_data))
+
+hyper_grid <- expand.grid(
+  mtry = floor(n_features * c(.05, .15, .25, .333, .4)),
+  min.node.size = c(1, 3, 5, 10), 
+  replace = c(TRUE, FALSE),                               
+  sample.fraction = c(.5, .63, .8),                       
+  rmse = NA                                               
+)
+
+for(i in seq_len(nrow(hyper_grid))) {
+  # fit model for ith hyperparameter combination
+  fit <- ranger(
+    formula         = satisfaction ~ ., 
+    data            = air_satisfaction,
+    num.trees       = n_features * 10,
+    mtry            = hyper_grid$mtry[i],
+    min.node.size   = hyper_grid$min.node.size[i],
+    replace         = hyper_grid$replace[i],
+    sample.fraction = hyper_grid$sample.fraction[i],
+    verbose         = FALSE,
+    seed            = 42,
+    respect.unordered.factors = 'order',
+    classification=TRUE
+  )
+  # export OOB error 
+  hyper_grid$rmse[i] <- sqrt(fit$prediction.error)
+}
+
+```
+
+```{r Calculation of Percentage Gain}
+
+hyper_grid %>%
+  arrange(rmse) %>%
+  mutate(perc_gain = (default_rmse - rmse) / default_rmse * 100) %>%
+  head(100)
+
+```
+
+
+```{r Importance of predictors and using ranger}
+  rf1 <- ranger(
+  satisfaction ~., 
+  data = air_satisfaction,
+  mtry = floor(n_features / 3),
+  respect.unordered.factors = "order",
+  seed = 42,
+  importance = "impurity",
+  classification=TRUE
+)
+
+p1 <- vip::vip(rf1, num_features = n_features, bar = FALSE)
+
+print(p1)
+```
+
+```{r Values taken from hyperparams}
+
+ rf_hyperparam <- ranger(
+  satisfaction ~.,
+  data = air_satisfaction,
+  mtry = 8,#floor(n_features / 3),
+  min.node.size =1,
+  respect.unordered.factors = "order",
+  seed = 42,
+  importance = "impurity",
+  classification=TRUE
+)
+
+ sqrt(rf_hyperparam$prediction.error)
+ 
+p2 <- vip::vip(rf_hyperparam, num_features = n_features, bar = FALSE)
+
+print(p2)
+
+
+```
+
+```{r Prediction of test dataset using randomforest}
+#Predicting for the test Dataset
+pred_rf_hyperparam <- predict(rf_hyperparam, data =test)
+
+#Checking Accuracy
+confusionMatrix(test$satisfaction, pred_rf_hyperparam$predictions)
+
+```
+
+```{r random forest using the selected important predictor}
+
+library(randomForest)
+pred_randF_Train <- randomForest(satisfaction~Online.boarding+Inflight.wifi.service+Class+Type.of.Travel+Inflight.entertainment+Customer.Type+Seat.comfort+Ease.of.Online.booking, data=air_satisfaction,
+                            importance = TRUE)
+
+```
+
+
+```{r Checking the trained model}
+pred_randF_Train
+```
+
+
+```{r Accuracy using Random forests}
+
+pred_test_RF <- predict(pred_randF_Train, newdata=test)
+confusionMatrix(test$satisfaction, pred_test_RF)
+
+```
+
+```{r check of predicted values in Random Forests}
+#Predicting for the test Dataset
+pred_rf_hyperparam <- predict(pred_randF_Train, newdata =test)
+length(pred_rf_hyperparam)
+length((test$satisfaction))
+#Checking Accuracy
+confusionMatrix(test$satisfaction, pred_rf_hyperparam)
+```
+
+
+```{r using SVM}
+library(kernlab)
+library(ROCR)
+library(caret)
+library(MASS)
+set.seed(42)
+
+
+
+air_satisfaction$satisfaction <- sapply(air_satisfaction$satisfaction, unclass)
+
+
+svm_classifier = svm(formula = satisfaction ~ .,
+                 data = air_satisfaction,
+                 type = 'C-classification',
+                 kernel = 'linear')
+svm_classifier
+
+coef(svm_classifier)
+```
+
+```{r Checking SVM Parameters}
+svm_classifier$levels
+
+svm_classifier$call
+
+svm_classifier$kernel
+
+svm_classifier$cost  
+
+svm_classifier_t = predict(svm_classifier)
+
+levels(svm_classifier_t)[1]="neutral or dissatisfied"
+levels(svm_classifier_t)[2]="satisfied"
+
+confusionMatrix(air_satisfaction$satisfaction,svm_classifier_t)
+```
+
+```{r SVM Params for test}
+pred_test_SVM <- predict(svm_classifier, newdata=test)
+
+str(test$satisfaction)
+pred_test_SVM <- as.factor(pred_test_SVM)
+
+str(pred_test_SVM)
+
+
+
+levels(pred_test_SVM)[1]="neutral or dissatisfied"
+levels(pred_test_SVM)[2]="satisfied"
+
+confusionMatrix(test$satisfaction,pred_test_SVM)
+```

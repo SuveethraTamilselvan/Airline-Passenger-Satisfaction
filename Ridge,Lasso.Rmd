@@ -1,0 +1,88 @@
+---
+title: 'Project: Airline Satisfaction'
+author: "Grace Sogunle"
+date: "3/23/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(caret, corrplot, glmnet, mlbench, tidyverse, mcclust, ridge)
+
+```
+
+
+
+```{r}
+setwd("/Users/gracesogunle/Documents")
+air_satisfaction <- read.csv('train.csv')
+air_satisfaction <- air_satisfaction[,3:25] # Removing x and id column
+test<- read.csv('test.csv')
+test <- test[,3:25]
+
+
+# Changing average value for arrival delay
+NA.position <- which(is.na(air_satisfaction$Arrival.Delay.in.Minutes))
+air_satisfaction$Arrival.Delay.in.Minutes[NA.position] = mean(air_satisfaction$Arrival.Delay.in.Minutes, na.rm = TRUE)
+
+NA.position1 <- which(is.na(test$Arrival.Delay.in.Minutes))
+test$Arrival.Delay.in.Minutes[NA.position1] = mean(test$Arrival.Delay.in.Minutes, na.rm = TRUE)
+
+# Removing arrival delay 
+air_satisfaction <- air_satisfaction[-22]
+
+```
+TRY  
+```{r}
+
+tr <- trainControl(method = "repeatedcv", 
+                          number = 10, repeats = 3,
+                          verboseIter = TRUE)
+
+
+set.seed(123)
+ridgeReg <- train(satisfaction~., test, method = 'glmnet',
+               tuneGrid = expand.grid(alpha = 0, 
+                                      lambda = seq(0.0001, 1, length = 5)),
+               trControl = tr)
+  # print results
+print(ridgeReg)
+
+ # plot results
+plot(ridgeReg)
+plot(ridgeReg$finalModel, xvar = 'lambda', lwd =1.4, label = TRUE)
+plot(varImp(ridgeReg, scale = TRUE))
+
+#Prediction
+pred_rid <- ridgeReg %>% predict(test)
+confusionMatrix(pred_rid, test$satisfaction)
+```
+
+```{r}
+set.seed(123)
+
+lassoReg <- train(satisfaction~., air_satisfaction, method = 'glmnet',
+               tuneGrid = expand.grid(alpha = 1, 
+                                      lambda = seq(0.0001, 0.3, length = 10)),
+               trControl = tr)
+
+  # print results
+print(lassoReg)
+
+ # plot results
+plot(lassoReg)
+plot(lassoReg$finalModel, xvar = 'lambda', lwd =1.4, label=TRUE)
+plot(varImp(lassoReg, scale = TRUE))
+
+
+# Make predictions
+lasso_pred <- lassoReg %>% predict(test)
+
+confusionMatrix(lasso_pred, test$satisfaction)
+```
+
+
+
+

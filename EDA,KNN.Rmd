@@ -1,0 +1,111 @@
+---
+title: "EDA,KNN"
+author: "Monica Daniel"
+date: "4/27/2021"
+output: pdf_document
+---
+
+```{r Load Packages}
+pacman::p_load(esquisse, forecast, tidyverse,
+gplots, GGally, gganimate,
+mosaic, scales, mosaic, mapproj, mlbench, data.table,class,caret, data.table, MASS, ggplot2, gridExtra,forecast, gains, pROC)
+
+
+```
+
+```{r Load Dataset}
+air_satisfaction <- read.csv('train.csv')
+air_satisfaction <- air_satisfaction[,3:25]# Removing x and id column
+test<- read.csv('test.csv')
+test <- test[,3:25]
+```
+
+```{r Compuing NA values with Mean}
+# Changing average value for arrival delay
+NA.position <- which(is.na(air_satisfaction$Arrival.Delay.in.Minutes))
+air_satisfaction$Arrival.Delay.in.Minutes[NA.position] = mean(air_satisfaction$Arrival.Delay.in.Minutes, na.rm = TRUE)
+
+NA.position1 <- which(is.na(test$Arrival.Delay.in.Minutes))
+test$Arrival.Delay.in.Minutes[NA.position1] = mean(test$Arrival.Delay.in.Minutes, na.rm = TRUE)
+```
+
+```{r Converting categorical variables into factors}
+names1 <- c('Gender','Customer.Type' ,'Type.of.Travel','Class','satisfaction')
+air_satisfaction[,names1] <- lapply(air_satisfaction[,names1] ,factor)
+test[,names1] <- lapply(test[,names1] ,factor)
+
+
+```
+
+
+```{r Heatmap}
+my_data <- air_satisfaction[, !(names(air_satisfaction) %in% names1)]
+
+heatmap.2(cor(my_data), dendrogram = "none",
+   cellnote = round(cor(my_data),2), notecol = "navy",
+   col = cm.colors(12), cexRow = 1.1, cexCol = 1.1,
+   srtCol = 45,
+   key = FALSE, trace = "none", margins = c(15,15),Rowv = NA, Colv = NA)
+```
+
+```{r EDA}
+tbl <- table(air_satisfaction$satisfaction, air_satisfaction$Gender)
+barplot(tbl, col =c("navy", "orange"),beside = TRUE, 
+        xlab="Gender", ylab="Number of Customers", main="Satisfaction based on Gender")
+legend("topright", c("neutral/dissatisfied", "satisfied"), col=c("navy","orange"), lwd=5) 
+```
+
+```{r}
+tbl <- table(air_satisfaction$satisfaction, air_satisfaction$Customer.Type)
+barplot(tbl, col =c("navy", "orange"),beside = TRUE, 
+        xlab="Customer type", ylab="Number of Customers", main="Satisfaction based on Customer type")
+legend("topleft", c("neutral/dissatisfied", "satisfied"), col=c("navy","orange"), lwd=5)
+```
+
+```{r}
+tbl <- table(air_satisfaction$satisfaction, air_satisfaction$Type.of.Travel)
+barplot(tbl, col =c("navy", "orange"),beside = TRUE, 
+        xlab="Type of travel", ylab="Number of Customers", main="Satisfaction based on Type of travel")
+legend("topright", c("neutral/dissatisfied", "satisfied"), col=c("navy","orange"), lwd=5)
+```
+
+```{r}
+tbl <- table(air_satisfaction$satisfaction, air_satisfaction$Class)
+barplot(tbl, col =c("navy", "orange"),beside = TRUE, 
+        xlab="Class", ylab="Number of Customers", main="Satisfaction based on Class")
+legend("topright", c("neutral/dissatisfied", "satisfied"), col=c("navy","orange"), lwd=5)
+```
+
+```{r}
+tbl <- table(air_satisfaction$satisfaction, air_satisfaction$Age)
+barplot(tbl, col =c("navy", "orange"), 
+        xlab="Age", ylab="Number of Customers", main="Satisfaction based on Class")
+legend("topright", c("neutral/dissatisfied", "satisfied"), col=c("navy","orange"), lwd=5)
+```
+
+```{r KNN ALGORITHM}
+outcome <- air_satisfaction[,23]
+
+drop <- c("Arrival.Delay.in.Minutes","satisfaction","Gender","Customer.Type","Type.of.Travel","Class","Flight.Distance","Departure.Delay.in.Minutes","Age")
+air_satisfaction <- air_satisfaction[,!(names(air_satisfaction) %in% drop)]
+
+
+```
+
+
+```{r}
+set.seed(42)
+pred_caret <- train(air_satisfaction, outcome, method = "knn", preProcess = c("center","scale"))
+pred_caret
+```
+
+```{r}
+plot(pred_caret)
+```
+
+```{r}
+knnPredict <- predict(pred_caret, newdata = test)
+
+confusionMatrix(knnPredict,test$satisfaction)
+```
+

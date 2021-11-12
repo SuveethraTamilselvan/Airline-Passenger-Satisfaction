@@ -1,0 +1,98 @@
+---
+title: "New Project"
+author: "Suveethra Tamilselvan"
+date: "5/4/2021"
+output: html_document
+---
+```{r Importing Dataset}
+pacman::p_load(caret, corrplot, glmnet, mlbench, tidyverse,e1071,broom,MASS,ROCR,rpart,rpart.plot)
+set.seed(42)
+air_satisfaction <- read.csv('train.csv')
+test<- read.csv('test.csv')
+test <- test[,3:25]
+air_satisfaction <- air_satisfaction[,3:25]
+```
+
+```{r}
+# Convert categorical Variables into Factor -Train data
+
+names1 <- c('Gender','Customer.Type' ,'Type.of.Travel','Class','satisfaction')
+air_satisfaction[,names1] <- lapply(air_satisfaction[,names1] ,factor)
+
+```
+
+```{r}
+# Convert categorical Variables into Factor -Test data
+names3 <- c('Gender','Customer.Type' ,'Type.of.Travel','Class','satisfaction')
+test[,names1] <- lapply(test[,names1] ,factor)
+```
+
+```{r Logistic Regression}
+options(scipen=999)
+mylogit <- glm(satisfaction ~ Gender + Customer.Type + Age + 
+                 Type.of.Travel + Class + Flight.Distance + Inflight.wifi.service + 
+                 Departure.Arrival.time.convenient + Ease.of.Online.booking + 
+                 Gate.location + Food.and.drink + Online.boarding +Seat.comfort +
+                 Inflight.entertainment + On.board.service + Leg.room.service +
+                 Baggage.handling + Checkin.service + Inflight.service +
+                 Cleanliness + Departure.Delay.in.Minutes, data = air_satisfaction, family = "binomial")
+summary(mylogit)
+```
+```{r Dropping Flight distance and few other variables that was found insignificant from elastic net}
+mylogit1 <- glm(satisfaction ~Customer.Type + 
+                 Type.of.Travel + Class + Inflight.wifi.service + 
+                 Departure.Arrival.time.convenient +Online.boarding +Inflight.entertainment + On.board.service + Leg.room.service +
+                 Baggage.handling + Checkin.service + Inflight.service +
+                 Cleanliness,Departure.Delay.in.Minutes,data = air_satisfaction, family = "binomial")
+summary(mylogit1)
+exp(coef(mylogit1))
+```
+```{r Accuracy}
+
+
+logit.reg.pred <- predict(mylogit1, test, type = "response")
+
+t(t(head(logit.reg.pred, 10)))
+
+# confusion matrix
+confusion<-table(test$satisfaction , logit.reg.pred>0.5)
+accuracy <- (confusion[2, 2] + confusion[1, 1]) / sum(confusion)
+accuracy
+```
+
+
+```{r Decision Tree}
+options(scipen=999)
+default.ct <- rpart(satisfaction~ Gender + Customer.Type + Age + 
+               Type.of.Travel + Class + Flight.Distance + Inflight.wifi.service + 
+               Departure.Arrival.time.convenient + Ease.of.Online.booking + 
+               Gate.location + Food.and.drink + Online.boarding + Seat.comfort +
+               Inflight.entertainment + On.board.service + Leg.room.service +
+               Baggage.handling + Checkin.service + Inflight.service +
+               Cleanliness + Departure.Delay.in.Minutes, data = air_satisfaction, method = "class")
+
+prp(default.ct, type = 1, under = TRUE, roundint = FALSE, 
+    split.font = 2, varlen = -10, box.palette = "BuOr")
+rpart.rules(default.ct, cover = TRUE)
+```
+
+
+```{r}
+#Analyzing the Importance of variable using the Variable Importance Plot
+varImp(default.ct)
+```
+```{r Using the variables from above code}
+default.ct1<- rpart(satisfaction~ Age + 
+               Type.of.Travel + Class+Inflight.wifi.service + Ease.of.Online.booking + Online.boarding +Inflight.entertainment + On.board.service + Leg.room.service , data = air_satisfaction, method = "class")
+
+prp(default.ct1, type = 1, under = TRUE, roundint = FALSE, 
+    split.font = 2, varlen = -10, box.palette = "BuOr")
+rpart.rules(default.ct1, cover = TRUE)
+```
+```{r Accuracy}
+default.ct.point.pred.valid <- predict(default.ct1, 
+                                       newdata = test, 
+                                       type = "class")
+confusionMatrix(default.ct.point.pred.valid, as.factor(test$satisfaction))
+```
+
