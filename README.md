@@ -1,1 +1,3 @@
 # Airline-Passenger-Satisfaction
+
+The Airline industry is one of the most diverse, dynamic businesses in the world. Like most other businesses, air travel has also been decimated by COVID-19. Some airlines have even filed for bankruptcy. As the vaccines are finally being rolled out, it is expected for passengers to schedule their holidays, education plans, business trips etc. The demand for air travel is expected to surge and airlines must prepare for a competitive edge. In this project, airline passenger satisfaction dataset will be explored, and a classification model will be implemented to analyze the crucial factors contributing towards the satisfaction of the  customers. Further, the performance metrics of different classifiers will be compared.
